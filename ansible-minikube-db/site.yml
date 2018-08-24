@@ -1,0 +1,65 @@
+---
+- hosts: localhost
+  # vars_prompt:
+  #   - name: ansible_sudo_pass
+  #       prompt: "Enter sudo password"
+        
+  tasks:
+    - name: Create bin dir
+      tags: cbin
+      file:
+        path: ~/bin
+        state: directory
+
+    - name: Download minikube tools
+      tags: getmkubetools
+      get_url:
+        url: "{{ item.url }}"
+        dest: ~/bin/{{ item.dest }}
+        mode: 0770
+      with_items:
+        - { url: 'http://storage.googleapis.com/kubernetes-release/release/v1.9.1/bin/linux/amd64/kubectl', dest: 'kubectl'}
+        - { url: 'https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64', dest: 'minikube'}
+        - { url: 'https://github.com/docker/machine/releases/download/v0.13.0/docker-machine-Linux-x86_64', dest: 'docker-machine'}
+        - { url: 'https://github.com/dhiltgen/docker-machine-kvm/releases/download/v0.10.0/docker-machine-driver-kvm-ubuntu16.04', dest: 'docker-machine-driver-kvm'}
+
+    # - name: Copy minikube files over to /usr/local/bin
+    #   become: yes
+    #   copy:
+    #     src: "{{ item }}"
+    #     dest: /usr/local/bin
+    #     owner: root
+    #     mode: 0770
+    #   with_fileglob:
+    #     - ~/bin/*
+
+    - name: Install required packages
+      tags: packages
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      become: yes
+      with_items:
+        - libvirt-bin
+        - qemu-kvm
+        - docker.io
+
+    - name: group list
+      tags: glist
+      shell: /usr/bin/getent group | awk -F":" '{print $1}'
+      register: groups_list
+
+    - name: "Add user to groups {{ ansible_user }}"
+      tags: addusers
+      user:
+        name: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+        groups: "{{ item }}"
+        append: yes
+      become: yes
+      when: '"{{ item }}" in groups_list.stdout_lines'
+      with_items:
+        - libvirt
+        - libvirtd
+        - docker
+
